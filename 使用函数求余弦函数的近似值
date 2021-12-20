@@ -1,0 +1,26 @@
+#include <stdio.h>
+#include <math.h>
+
+double funcos( double e, double x );
+
+int main()
+{    
+    double e, x;
+
+    scanf("%lf %lf", &e, &x);
+    printf("cos(%.2f) = %.6f\n", x, funcos(e, x));
+
+    return 0;
+}
+ double funcos( double e, double x )
+ 
+ {
+ 	double m=1.0,n=1.0;
+ 	for(int i=1;fabs(m)>=e;i++)
+ 	{
+ 		m=m*x*x/((2*i)*(2*i-1));
+ 		m=-m;
+ 		n+=m;
+	 }
+	 return n;
+ }
