@@ -1,0 +1,110 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <ctime>
+#include <cstdlib>
+
+// 定义二元函数 f(x, y)，这里是一个示例函数
+double objectiveFunction(double x, double y) {
+    // 请根据你的实际问题定义这个函数
+    // 这里只是一个示例函数，你需要替换为你自己的复杂函数
+    return x * x + y * y + std::sin(x) + std::cos(y);
+}
+
+// 粒子结构体
+struct Particle {
+    double x;
+    double y;
+    double vx;
+    double vy;
+    double bestX;
+    double bestY;
+    double bestValue;
+};
+
+int main() {
+    // 初始化随机数种子
+    std::srand(static_cast<unsigned int>(std::time(nullptr)));
+
+    // 粒子群参数
+    const int numParticles = 20;
+    const int numIterations = 100;
+    const double inertiaWeight = 0.7;  // 惯性权重
+    const double cognitiveWeight = 1.5;  // 个体认知权重
+    const double socialWeight = 1.5;  // 社会认知权重
+    const double velocityLimit = 0.2;  // 速度限制
+
+    // 初始化粒子群
+    std::vector<Particle> particles(numParticles);
+    double globalBestX = 0.0;
+    double globalBestY = 0.0;
+    double globalBestValue = objectiveFunction(globalBestX, globalBestY);
+
+    for (int i = 0; i < numParticles; ++i) {
+        particles[i].x = (rand() % 5000) / 1000.0;  // 随机初始化x
+        particles[i].y = (rand() % 5000) / 1000.0;  // 随机初始化y
+        particles[i].vx = 0.0;
+        particles[i].vy = 0.0;
+        particles[i].bestX = particles[i].x;
+        particles[i].bestY = particles[i].y;
+        particles[i].bestValue = objectiveFunction(particles[i].bestX, particles[i].bestY);
+
+        // 更新全局最优值
+        if (particles[i].bestValue < globalBestValue) {
+            globalBestX = particles[i].bestX;
+            globalBestY = particles[i].bestY;
+            globalBestValue = particles[i].bestValue;
+        }
+    }
+
+    // 开始迭代优化
+    for (int iteration = 0; iteration < numIterations; ++iteration) {
+        for (int i = 0; i < numParticles; ++i) {
+            // 更新速度
+            double r1 = static_cast<double>(rand()) / RAND_MAX;
+            double r2 = static_cast<double>(rand()) / RAND_MAX;
+
+            particles[i].vx = inertiaWeight * particles[i].vx +
+                cognitiveWeight * r1 * (particles[i].bestX - particles[i].x) +
+                socialWeight * r2 * (globalBestX - particles[i].x);
+
+            particles[i].vy = inertiaWeight * particles[i].vy +
+                cognitiveWeight * r1 * (particles[i].bestY - particles[i].y) +
+                socialWeight * r2 * (globalBestY - particles[i].y);
+
+            // 限制速度
+            double speed = std::sqrt(particles[i].vx * particles[i].vx + particles[i].vy * particles[i].vy);
+            if (speed > velocityLimit) {
+                particles[i].vx = velocityLimit * particles[i].vx / speed;
+                particles[i].vy = velocityLimit * particles[i].vy / speed;
+            }
+
+            // 更新位置
+            particles[i].x += particles[i].vx;
+            particles[i].y += particles[i].vy;
+
+            // 计算当前位置的值
+            double currentValue = objectiveFunction(particles[i].x, particles[i].y);
+
+            // 更新个体最优值和位置
+            if (currentValue < particles[i].bestValue) {
+                particles[i].bestValue = currentValue;
+                particles[i].bestX = particles[i].x;
+                particles[i].bestY = particles[i].y;
+            }
+
+            // 更新全局最优值和位置
+            if (particles[i].bestValue < globalBestValue) {
+                globalBestValue = particles[i].bestValue;
+                globalBestX = particles[i].bestX;
+                globalBestY = particles[i].bestY;
+            }
+        }
+    }
+
+    // 输出结果
+    std::cout << "最优解 (x, y) = (" << globalBestX << ", " << globalBestY << ")" << std::endl;
+    std::cout << "最优值 f(x, y) = " << globalBestValue << std::endl;
+
+    return 0;
+}
