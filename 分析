@@ -1,0 +1,146 @@
+package IP;
+import org.jnetpcap.Pcap;
+import org.jnetpcap.PcapIf;
+import org.jnetpcap.packet.PcapPacket;
+import org.jnetpcap.packet.PcapPacketHandler;
+
+import javax.swing.*;
+import java.awt.*;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import org.jnetpcap.packet.format.FormatUtils;
+import org.jnetpcap.protocol.network.Ip4;
+import org.jnetpcap.protocol.tcpip.Http;
+public class PacketCaptureGUI {
+    private JTextArea outputTextArea; // 用于显示捕获到的数据包信息
+    private BufferedWriter logFileWriter; // 用于将数据包信息写入日志文件
+    private Pcap pcap; // Pcap对象，用于捕获数据包
+
+    // 构造函数，初始化GUI界面和Pcap对象
+    public PacketCaptureGUI() {
+        JFrame frame = new JFrame("数据包捕获");// 创建窗口
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);// 设置窗口关闭操作
+        frame.setLayout(new BorderLayout());// 设置布局管理器
+
+        outputTextArea = new JTextArea(20, 50);// 创建文本区域，用于显示数据包信息
+        outputTextArea.setEditable(false); // 设置文本区域不可编辑
+        JScrollPane scrollPane = new JScrollPane(outputTextArea);// 创建滚动面板，将文本区域添加到滚动面板中
+
+        JButton startButton = new JButton("开始捕获");// 创建按钮，用于开始捕获数据包
+        startButton.addActionListener(e -> startPacketCapture());// 为按钮添加点击事件监听器，点击时调用startPacketCapture方法
+
+        frame.add(scrollPane, BorderLayout.CENTER);// 将滚动面板添加到窗口的中央位置
+        frame.add(startButton, BorderLayout.SOUTH); // 将按钮添加到窗口的南部位置
+
+        frame.pack();// 调整窗口大小以适应其子组件的首选大小和布局
+        frame.setVisible(true);// 设置窗口可见
+
+        try {
+            logFileWriter = new BufferedWriter(new FileWriter("packet_log.txt", true));//创建日志文件写入器，追加模式打开文件
+        } catch (IOException e) {
+            e.printStackTrace();// 如果发生异常，打印异常堆栈信息
+        }
+    }
+
+    // 开始捕获数据包的方法
+    public void startPacketCapture() {
+        List<PcapIf> allDevs = new ArrayList<>();
+        StringBuilder errbuf = new StringBuilder();//定义网卡列表
+        int r = Pcap.findAllDevs(allDevs, errbuf);// 查找所有网络设备，将设备信息存储在allDevs列表中，如果发生错误，将错误信息存储在errbuf中
+        if (r != Pcap.OK || allDevs.isEmpty()) {// 如果查找失败或没有找到任何设备，打印错误信息并返回
+            System.err.println("Can't read list of devices: " + errbuf);
+            return;
+        }
+
+        PcapIf device = allDevs.get(0); // 选择第一个设备（可以修改此部分代码，选择其他设备）
+
+        int snaplen = 64 * 1024;// 设置捕获的数据包长度为65536字节
+        int flags = Pcap.MODE_PROMISCUOUS;// 设置捕获模式为混杂模式
+        int timeout = 10 * 1000;// 设置超时时间为10秒
+
+        pcap = Pcap.openLive(device.getName(), snaplen, flags, timeout, errbuf);// 打开设备进行捕获，如果发生错误，将错误信息存储在errbuf中
+        if (pcap == null) {// 如果打开设备失败，打印错误信息并返回
+            System.err.println("Error while opening device for capture: " + errbuf);
+            return;
+        }
+
+        PcapPacketHandler<String> packetHandler = new PcapPacketHandler() {// 创建一个数据包处理器，用于处理捕获到的数据包
+            private Http http = new Http();
+            @Override
+            public void nextPacket(PcapPacket pcapPacket, Object o) {
+
+            }
+
+            public void nextPacket(PcapPacket packet, String user) {
+                if (packet.hasHeader(http)) {
+                    System.out.println(packet);
+                }
+                String packetInfo = analyzePacket(packet);// 分析数据包信息
+                SwingUtilities.invokeLater(() -> {
+                    outputTextArea.append(packetInfo + "\n");
+                });// 将数据包信息添加到文本区域中，使用SwingUtilities.invokeLater确保在事件分派线程中执行此操作，避免并发问题
+
+                try {
+                    logFileWriter.write(packetInfo);// 将数据包信息写入日志文件
+                    logFileWriter.newLine();
+                    logFileWriter.flush();// 刷新日志文件缓冲区，确保数据被写入文件
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+        pcap.loop(Pcap.LOOP_INFINITE, packetHandler, ""); // 开始捕获数据包，无限循环直到程序结束
+    }
+
+    // 分析数据包的方法，返回一个包含数据包信息的字符串
+    public String analyzePacket(PcapPacket packet) {
+        StringBuilder packetInfo = new StringBuilder();// 存储数据包信息
+        packetInfo.append("Received packet at ").append(System.currentTimeMillis()).append(":\n");// 添加接收时间信息
+
+        // 解析以太网帧头
+        if (packet.hasHeader(Ip4.ID)) {
+            packetInfo.append("Ethernet Frame:\n");// 添加以太网帧头信息
+            byte[] ethernetHeader = packet.getByteArray(0, 14);// 获取以太网帧头字节数组
+            String sourceMAC = String.format("%02X:%02X:%02X:%02X:%02X:%02X", // 格式化源MAC地址
+                    ethernetHeader[6], ethernetHeader[7], ethernetHeader[8],
+                    ethernetHeader[9], ethernetHeader[10], ethernetHeader[11]);
+            String destinationMAC = String.format("%02X:%02X:%02X:%02X:%02X:%02X",// 格式化目标MAC地址
+                    ethernetHeader[0], ethernetHeader[1], ethernetHeader[2],
+                    ethernetHeader[3], ethernetHeader[4], ethernetHeader[5]);
+            packetInfo.append("Source MAC: ").append(sourceMAC).append("\n");// 添加源MAC地址信息
+            packetInfo.append("Destination MAC: ").append(destinationMAC).append("\n");// 添加目标MAC地址信息
+        }
+
+        // 解析IP头部
+        if (packet.hasHeader(Ip4.ID)) {
+            packetInfo.append("IP Packet:\n"); // 添加IP头部信息
+            byte[] ipHeader = packet.getByteArray(14, 20);// 获取IP头部字节数组
+            int version = (ipHeader[0] >> 4) & 0xF;// 获取IP版本号
+            int headerLength = ipHeader[0] & 0xF;// 获取IP头部长度
+            int totalLength = ((ipHeader[2] & 0xFF) << 8) | (ipHeader[3] & 0xFF);// 获取IP总长度
+
+            String sourceIP = String.format("%d.%d.%d.%d", ipHeader[12] & 0xFF, ipHeader[13] & 0xFF,// 格式化源IP地址
+                    ipHeader[14] & 0xFF, ipHeader[15] & 0xFF);
+            String destinationIP = String.format("%d.%d.%d.%d", ipHeader[16] & 0xFF, ipHeader[17] & 0xFF, // 格式化目标IP地址
+                    ipHeader[18] & 0xFF, ipHeader[19] & 0xFF);
+            packetInfo.append("Version: ").append(version).append("\n"); // 添加IP版本号信
+            packetInfo.append("Header Length: ").append(headerLength * 4).append(" bytes\n");// 添加IP头部长度信息
+            packetInfo.append("Total Length: ").append(totalLength).append(" bytes\n");// 添加IP总长度信息
+            packetInfo.append("Source IP: ").append(sourceIP).append("\n");// 添加源IP地址信息
+            packetInfo.append("Destination IP: ").append(destinationIP).append("\n");// 添加目标IP地址信息
+        }
+
+        // 添加更多协议的解析逻辑，根据需要
+
+        return packetInfo.toString();// 返回数据包信息字符串
+    }
+
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new PacketCaptureGUI());// 在事件分派线程中创建并显示GUI界面
+    }
+}
