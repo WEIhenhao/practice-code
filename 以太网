@@ -1,0 +1,93 @@
+package IP;
+
+import java.awt.*;
+import javax.swing.*;
+import java.io.*;
+
+import org.jnetpcap.Pcap;
+import org.jnetpcap.PcapDumper;
+import org.jnetpcap.PcapIf;
+import org.jnetpcap.packet.PcapPacket;
+import org.jnetpcap.packet.PcapPacketHandler;
+
+public class PacketCaptureGUI {
+    private JTextArea outputTextArea;// 用于显示捕获到的数据包信息的文本区域
+    private BufferedWriter logFileWriter;// 用于将数据包信息写入日志文件的缓冲写入器
+    private Pcap pcap;// Pcap对象，用于捕获网络数据包
+
+    public PacketCaptureGUI() {
+        // 创建并配置GUI
+        JFrame frame = new JFrame("数据包捕获");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setLayout(new BorderLayout());
+
+        outputTextArea = new JTextArea(20, 50);
+        outputTextArea.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(outputTextArea);
+
+        JButton startButton = new JButton("开始捕获");
+        startButton.addActionListener(e -> startPacketCapture());// 为开始捕获按钮添加点击事件监听器
+
+        frame.add(scrollPane, BorderLayout.CENTER);
+        frame.add(startButton, BorderLayout.SOUTH);
+
+        frame.pack();
+        frame.setVisible(true);
+
+        // 初始化日志文件
+        try {
+            logFileWriter = new BufferedWriter(new FileWriter("packet_log.txt", true));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void startPacketCapture() {
+        PcapIf device = null; // 选择要捕获数据包的网络接口
+        int snaplen = 64 * 1024; // 捕获整个数据包
+        int flags = Pcap.MODE_PROMISCUOUS;// 混杂模式，允许捕获所有类型的数据包
+        int timeout = 10 * 1000; // 10秒超时时间
+
+        pcap = Pcap.openLive(device.getName(), snaplen, flags, timeout, new StringBuilder());
+
+        PcapDumper dumper = pcap.dumpOpen("packet_capture.pcap");
+
+        PcapPacketHandler<String> packetHandler = new PcapPacketHandler() {
+            @Override
+            public void nextPacket(PcapPacket pcapPacket, Object o) {
+
+            }
+
+            public void nextPacket(PcapPacket packet, String user) {
+                // 处理和分析接收到的数据包
+                String packetInfo = analyzePacket(packet);
+
+                // 在GUI中显示数据包信息
+                outputTextArea.append(packetInfo + "\n");
+
+                // 将数据包信息写入日志文件
+                try {
+                    logFileWriter.write(packetInfo);
+                    logFileWriter.newLine();
+                    logFileWriter.flush();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+        pcap.loop(Pcap.LOOP_INFINITE, packetHandler, "");// 开始捕获数据包，无限循环直到程序结束
+    }
+
+    public String analyzePacket(PcapPacket packet) {
+        // 实现数据包分析逻辑
+        // 解析和分析数据包的内容
+        // 可以使用packet.getByteArray(0, packet.size())访问数据包数据
+        // ..
+        return "Received packet at " + System.currentTimeMillis() + ":\n" + "Packet data: [Packet Data]";
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new PacketCaptureGUI());// 在事件调度线程中创建并显示GUI
+    }
+}
